@@ -1,0 +1,22 @@
+# The data itself lives on the Hugging Face Hub, not in git:
+#   https://huggingface.co/datasets/yuiseki/osm-tokyo23-src-2026-08
+# It is 235MB, cut from the planet file by `scripts/01..03` rather than
+# edited by hand. data/README.md, data/LICENSE and data/provenance.yaml are
+# tracked: they are the dataset card and its notices, not the data.
+data/tokyo23-260831.osm.pbf
+data/tokyo23-260831.osm.pbf.md5
+data/tokyo23_osm_boundary.geojson
+data/parquet/
+
+# Intermediates. tokyo-bbox-260831.osm.pbf alone is 224MB, and it is the one
+# thing a rebuild has to spend 26 minutes of planet reading to produce.
+tmp/
+
+# Specific to this machine and to a sibling repository that is not public:
+# a local Overpass instance's staleness, and an id-by-id reconciliation against
+# a question set a visitor cannot see. The part of it that generalises has been
+# moved into docs/clipping-and-broken-rings.md.
+docs/overpass-staleness-*.md
+
+__pycache__/
+.venv/

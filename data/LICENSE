@@ -1,0 +1,35 @@
+Open Database License (ODbL) v1.0
+https://opendatacommons.org/licenses/odbl/1-0/
+
+Everything under this directory is a Derivative Database of OpenStreetMap.
+
+  (c) OpenStreetMap contributors, available under the Open Database License.
+  https://www.openstreetmap.org/copyright
+
+The contents are cut from an OpenStreetMap planet file, which is distributed
+under ODbL:
+
+  https://planet.openstreetmap.org/pbf/planet-260831.osm.pbf
+  94,612,383,571 bytes, md5 c67437924cf55de40e8708c7192f354d
+
+That snapshot of 2026-08-31 is the only source. The
+extract covers the 23 special wards of Tokyo and nothing else. The boundary
+used to cut it is itself taken from that same snapshot, so the geometry in
+tokyo23_osm_boundary.geojson is OSM data too and carries ODbL.
+
+The Parquet files under parquet/ are the same records loaded into PostGIS with
+osm2pgsql and written back out. They are a reformatting, not new data, and
+carry ODbL unchanged. So does anything built from them: a database you load
+them into, an index, a set of question and answer pairs whose answers are
+computed from them.
+
+provenance.yaml records the versions of every tool in the chain, because the
+column layout of the Parquet files is decided by osm2pgsql's style file rather
+than by anything in this repository.
+
+ODbL-1.0 section 4.2 permits redistribution to satisfy the notice requirement
+by including either a copy of the licence or its URI. This file supplies the
+URI above. The full text is at that address.
+
+The MIT licence in the source repository covers the code that builds this and
+does not apply here.

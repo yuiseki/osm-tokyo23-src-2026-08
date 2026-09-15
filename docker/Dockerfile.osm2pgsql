@@ -1,0 +1,16 @@
+# osm2pgsql loader. Pinned so that the schema is reproducible.
+FROM ubuntu:24.04
+
+ARG OSM2PGSQL_VERSION
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      osm2pgsql${OSM2PGSQL_VERSION:+=$OSM2PGSQL_VERSION} \
+      postgresql-client \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# The style file decides which tags become columns, so it is part of the
+# schema definition and is taken from the repository, not from the package.
+COPY default.style /opt/osm2pgsql/default.style
+
+WORKDIR /work

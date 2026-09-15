@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: osm
+      POSTGRES_USER: osm
+      POSTGRES_PASSWORD: osm
+    ports:
+      - "55433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Mount the single file, not the directory: a directory mount would
+      # shadow the image's own postgis init scripts. 20- runs after them.
+      - ./initdb/20-extensions.sql:/docker-entrypoint-initdb.d/20-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U osm -d osm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  loader:
+    build:
+      context: .
+      dockerfile: Dockerfile.osm2pgsql
+      args:
+        OSM2PGSQL_VERSION: ${OSM2PGSQL_VERSION:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: osm
+      PGPASSWORD: osm
+      PGDATABASE: osm
+    volumes:
+      - ../data:/work/data:ro
+    command: ["sleep", "infinity"]
+
+  overpass:
+    build:
+      context: .
+      dockerfile: Dockerfile.overpass
+    environment:
+      OVERPASS_MODE: init
+      # The frozen pbf stays the only source artifact. init_osm3s.sh reads
+      # bz2-compressed XML (`bunzip2 < $PLANET_FILE`), so convert in place.
+      OVERPASS_PLANET_URL: file:///data/tokyo23-260831.osm.pbf
+      OVERPASS_PLANET_PREPROCESS: 'mv /db/planet.osm.bz2 /db/planet.osm.pbf && osmium cat -o /db/planet.osm.bz2 /db/planet.osm.pbf'
+      OVERPASS_META: 'yes'
+      # Areas are not in the data; they are derived by a separate rules run.
+      # Without this, every area[...] query returns nothing.
+      OVERPASS_USE_AREAS: 'true'
+      OVERPASS_MAX_TIMEOUT: 1000s
+      # Without this the container exits as soon as the import finishes,
+      # printing "initialization complete. Exiting." and serving nothing.
+      OVERPASS_STOP_AFTER_INIT: 'false'
+    # No healthcheck on /api/status: it always 502s in this image
+    # (std::out_of_range) even while /api/interpreter answers 200.
+    ports:
+      - "12346:80"
+    volumes:
+      - ../data:/data:ro
+      - overpassdb:/db
+
+  duckdb:
+    build:
+      context: .
+      dockerfile: Dockerfile.duckdb
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ../data:/work/data
+    command: ["sleep", "infinity"]
+
+volumes:
+  pgdata:
+  overpassdb:

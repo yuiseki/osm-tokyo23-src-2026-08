@@ -1,0 +1,8 @@
+# Overpass API serving the frozen extract.
+#
+# Pinned to v0.7.62.11. The base image already carries osmium 1.15.0, which the
+# entrypoint uses to read the source file's timestamp and which we reuse to
+# convert the pbf.
+#
+# There is nothing to add on top: the pin is the point of this file.
+FROM wiktorn/overpass-api:v0.7.62.11

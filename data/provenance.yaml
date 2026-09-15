@@ -1,0 +1,95 @@
+# Where this data comes from. Everything needed to rebuild it.
+source:
+  name: OpenStreetMap planet
+  file: planet-260831.osm.pbf
+  snapshot: 2026-08-31
+  url: https://planet.openstreetmap.org/pbf/planet-260831.osm.pbf
+  size: 94612383571
+  md5: c67437924cf55de40e8708c7192f354d
+  retention_note: |
+    OSM keeps its dated planet files for about ten years, so this URL is
+    expected to outlive most copies of this dataset. It is the one link that
+    makes the whole chain checkable: fetch it, verify the md5, and every step
+    below can be run again.
+  license: ODbL
+  license_note: |
+    OSM distributes planet files under ODbL, and this extract inherits it:
+    attribute the source, and share alike if you redistribute a modified
+    version.
+
+extent:
+  name: 東京都区部 / Tokyo Special Wards
+  rule: |
+    Administrative relations at admin_level=7 inside 東京都 whose name ends
+    with 区. Within Tokyo that matches exactly the 23 special wards; the
+    admin_level guard keeps the wards of other designated cities out.
+  count: 23
+  boundary_file: tokyo23_osm_boundary.geojson
+  boundary_note: |
+    Derived from the same snapshot as the data. Taking it from anywhere else
+    invites a vintage mismatch: a boundary drawn a year earlier once dropped
+    way/1553541361, created 2026-08-30, which broke Setagaya's ring and with
+    it every area query for that ward. Nothing in the totals showed it.
+
+extraction:
+  tool: osmium-tool 1.16.0 (libosmium 2.20.0)
+  strategy: complete_ways
+  note: |
+    A way with at least one node inside the wards is kept whole, including the
+    nodes that fall outside. Nothing is cut at the boundary, so the bounding
+    box of the result reaches well past the wards: the Ogasawara ferry route
+    leaves from Takeshiba pier and runs a thousand kilometres south.
+
+parquet:
+  built_from: tokyo23-260831.osm.pbf
+  chain:
+    - tool: osm2pgsql
+      version: 1.11.0+ds-1
+      output: pgsql (classic)
+      style: default.style, md5 ca34bbc54e6113a4b01e588e8f085f15
+      flags: [--hstore]
+      projection: EPSG:3857 (osm2pgsql's default; no -l, -E or -G)
+      note: |
+        The style decides which tags become columns, so it is pinned by
+        checksum rather than by the package version. --hstore is not optional
+        here: opening_hours, start_date, building:levels and operator:en are
+        not promoted to columns by this style, and questions ask about them.
+    - tool: postgis/postgis docker image
+      version: 16-3.4
+    - tool: duckdb
+      version: 1.5.5
+      note: |
+        Reads the PostGIS tables and writes the Parquet. The 1.5 line is
+        required; earlier lines misbehave here.
+  conversions:
+    - column: way
+      from: geometry(*, 3857)
+      to: WKB bytes, still EPSG:3857
+    - column: tags
+      from: hstore
+      to: JSON text
+  unchanged: |
+    The other 68 columns keep the names and types osm2pgsql gave them. No
+    column was invented, renamed or dropped, and the projection was not
+    changed, so a query written against planet_osm_point in PostGIS reads
+    almost the same against the Parquet.
+
+verification:
+  ward_rings: 1191/1191 boundary ways present, no ward incomplete
+  cross_engine: |
+    The same question, the count of amenity=cafe nodes per ward, was answered
+    in PostGIS, in Overpass and in DuckDB over the Parquet. All 23 wards agree
+    across all three.
+
+not_included:
+  - what: 多摩地域 (Tama, the cities west of the wards)
+    reason: Out of extent. The wards are the whole of it.
+  - what: 島嶼部 (the Izu and Ogasawara islands)
+    reason: |
+      Administratively part of Tokyo but not of the 23 wards. Including them
+      would stretch the bounding box across 18 degrees of longitude.
+  - what: a -G / --multi-geometry load
+    reason: |
+      Left at osm2pgsql's default, so a multipolygon relation occupies several
+      rows sharing one osm_id. Yoyogi Park, relation/19862716, is two rows.
+      Aggregate before measuring its area or the distance to its boundary.
