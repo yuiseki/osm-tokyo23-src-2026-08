@@ -125,12 +125,15 @@ The load uses osm2pgsql's defaults, without `-G`, so a multipolygon relation is
 several rows sharing one negated `osm_id`. Yoyogi Park, `relation/19862716`, is
 two rows. Aggregate before measuring it.
 
-`wiktorn/overpass-api` has three of its own, all handled in
-`scripts/06_start_overpass.sh`: it exits after the import unless
-`OVERPASS_STOP_AFTER_INIT=false`, its `/api/status` always returns 502 while
-`/api/interpreter` answers fine, and its database directory is created
-`drwx------` so fcgiwrap cannot reach the dispatcher socket until it is
-chmodded.
+`wiktorn/overpass-api` has four of its own, all handled in
+`docker/compose.yml` and `scripts/06_start_overpass.sh`: it exits after the
+import unless `OVERPASS_STOP_AFTER_INIT=false`, its `/api/status` always
+returns 502 while `/api/interpreter` answers fine, its database directory is
+created `drwx------` so fcgiwrap cannot reach the dispatcher socket until it
+is chmodded, and by default the dispatcher refuses a query identical to one it
+just served, answering HTTP 200 with an HTML page that a JSON client reads as
+a parse error. `OVERPASS_ALLOW_DUPLICATE_QUERIES=yes` turns that off, and
+anything that re-asks the same question needs it.
 
 ## Source
 

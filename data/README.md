@@ -203,6 +203,18 @@ kept whole. Nothing is chopped at the boundary, which is why the bounding box
 reaches far past Tokyo: the Ogasawara ferry route starts at Takeshiba pier and
 runs a thousand kilometres out to sea.
 
+## A question set built on this
+
+[yuiseki/osm-tokyo23-questions](https://huggingface.co/datasets/yuiseki/osm-tokyo23-questions)
+is 131 questions about these wards, written by hand rather than synthesised.
+It ships no answers: 90 of them were checked against this snapshot only to
+confirm an answer exists.
+
+One thing that set had to decide, and that anyone computing answers here will
+also have to: counting cafes in Setagaya gives 258 with
+`node(area.a)["amenity"="cafe"]` and 279 with `nwr`. Cafes drawn as buildings
+are ways. "How many cafes" is 8% two different questions.
+
 ## Source
 
 Code, Docker files and the verification scripts:

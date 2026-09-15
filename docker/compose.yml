@@ -51,6 +51,12 @@ services:
       # Without this, every area[...] query returns nothing.
       OVERPASS_USE_AREAS: 'true'
       OVERPASS_MAX_TIMEOUT: 1000s
+      # The dispatcher refuses a query identical to one it has just served.
+      # It answers HTTP 200 with an HTML error page whose body says
+      # duplicate_query, so a JSON client sees a parse failure rather than a
+      # refusal. Anything that re-asks the same question, a verification pass
+      # or a benchmark, needs this on.
+      OVERPASS_ALLOW_DUPLICATE_QUERIES: 'yes'
       # Without this the container exits as soon as the import finishes,
       # printing "initialization complete. Exiting." and serving nothing.
       OVERPASS_STOP_AFTER_INIT: 'false'
