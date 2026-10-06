@@ -77,6 +77,8 @@ services:
         condition: service_healthy
     volumes:
       - ../data:/work/data
+      # 07 writes its export here; 08 lays it out into data/parquet/.
+      - ../tmp:/work/tmp
     command: ["sleep", "infinity"]
 
 volumes:

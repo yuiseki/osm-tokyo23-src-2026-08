@@ -13,6 +13,10 @@ against planet_osm_point in PostGIS reads almost the same here.
 
 DuckDB runs in its own pinned container (1.5.5), so the version is part of the
 repository rather than whatever happens to be installed.
+
+The export lands in tmp/parquet-export/, not in data/parquet/. It is in the
+order PostGIS returns rows and has no GeoParquet metadata; 08 turns it into
+the published layout and 09 checks the two against each other.
 """
 import subprocess
 import sys
@@ -20,12 +24,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCKER = ROOT / "docker"
-OUT = ROOT / "data" / "parquet"
+OUT = ROOT / "tmp" / "parquet-export"
 TABLES = ["planet_osm_point", "planet_osm_line", "planet_osm_polygon",
           "planet_osm_roads"]
 
 # Inside the containers: the loader's bind mount and the compose network.
-IN_CONTAINER_OUT = "/work/data/parquet"
+IN_CONTAINER_OUT = "/work/tmp/parquet-export"
 DSN = "host=db port=5432 dbname=osm user=osm password=osm"
 
 

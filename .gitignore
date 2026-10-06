@@ -1,6 +1,6 @@
 # The data itself lives on the Hugging Face Hub, not in git:
 #   https://huggingface.co/datasets/yuiseki/osm-tokyo23-src-2026-08
-# It is 235MB, cut from the planet file by `scripts/01..03` rather than
+# It is about 300MB, cut from the planet file by `scripts/01..03` rather than
 # edited by hand. data/README.md, data/LICENSE and data/provenance.yaml are
 # tracked: they are the dataset card and its notices, not the data.
 data/tokyo23-260831.osm.pbf
@@ -10,6 +10,7 @@ data/parquet/
 
 # Intermediates. tokyo-bbox-260831.osm.pbf alone is 224MB, and it is the one
 # thing a rebuild has to spend 26 minutes of planet reading to produce.
+# tmp/parquet-export/ is the export of 07, which 08 lays out into data/parquet/.
 tmp/
 
 # Specific to this machine and to a sibling repository that is not public:
@@ -20,3 +21,6 @@ docs/overpass-staleness-*.md
 
 __pycache__/
 .venv/
+
+.pytest_cache/
+.ruff_cache/

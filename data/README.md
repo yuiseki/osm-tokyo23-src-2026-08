@@ -62,7 +62,7 @@ model can read a novel schema rather than whether it knows OSM and SQL.
 |---|---|
 | `tokyo23-260831.osm.pbf` | the frozen extract. md5 `44a4ba2182379c147f20a27ad1b513ef` |
 | `tokyo23_osm_boundary.geojson` | the boundary it was cut with |
-| `parquet/planet_osm_*.parquet` | the same records in the osm2pgsql schema |
+| `parquet/planet_osm_*.parquet` | the same records in the osm2pgsql schema, as GeoParquet 1.1 in spatial order |
 | `provenance.yaml` | every version in the chain, and what was left out |
 | `LICENSE` | the ODbL notice and the chain of derivation |
 
@@ -107,13 +107,12 @@ out count;
 ```
 
 ```sql
--- DuckDB, straight off the Parquet
+-- DuckDB, straight off the Parquet. 507 with DuckDB 1.5.6.
 LOAD spatial;
 CREATE VIEW planet_osm_point   AS SELECT * FROM read_parquet('planet_osm_point.parquet');
 CREATE VIEW planet_osm_polygon AS SELECT * FROM read_parquet('planet_osm_polygon.parquet');
 SELECT count(*) FROM planet_osm_point p
-JOIN planet_osm_polygon w
-  ON ST_Within(ST_GeomFromWKB(p.way), ST_GeomFromWKB(w.way))
+JOIN planet_osm_polygon w ON ST_Within(p.way, w.way)
 WHERE w.boundary='administrative' AND w.admin_level='7' AND w.name='千代田区'
   AND p.amenity='cafe';
 ```
@@ -126,17 +125,22 @@ and none is needed.
 
 ## Reading the Parquet
 
-Two columns could not travel as they were. Everything else keeps the name and
-type osm2pgsql gave it.
+Two columns could not travel as they were, and one was added. Everything else
+keeps the name and type osm2pgsql gave it, in the same order.
 
 | column | PostGIS | Parquet |
 |---|---|---|
-| `way` | `geometry(*, 3857)` | WKB bytes, still EPSG:3857 |
+| `way` | `geometry(*, 3857)` | WKB bytes, still EPSG:3857, declared in the GeoParquet metadata |
 | `tags` | `hstore` | JSON text |
+| `bbox` | (none) | added last: `struct<xmin, ymin, xmax, ymax>` of doubles, EPSG:3857 metres |
 
 Three things to know if you are porting a PostGIS query to DuckDB.
 
-Wrap the geometry: `ST_GeomFromWKB(way)`.
+`way` arrives as a geometry. The files carry GeoParquet metadata that declares
+it, so DuckDB 1.5 reads it as `GEOMETRY('EPSG:3857')` with no wrapping, and
+`ST_GeomFromWKB(way)` is now a type error; other readers that understand
+GeoParquet should likewise pick up the column and its CRS. To see the raw WKB
+in DuckDB, `SET enable_geoparquet_conversion = false` first.
 
 Tags are JSON, so `->>` rather than `->`, and the parentheses are
 required. `->>` binds looser than `=`, and without them DuckDB tries to cast
@@ -149,6 +153,72 @@ WHERE (tags->>'operator:en') = 'East Japan Railway'
 DuckDB's spatial extension has no `geography` type and `ST_Distance_Sphere`
 takes only points, so project to metres when you need a true distance. For
 Tokyo, EPSG:32654.
+
+## Layout: spatial order, bbox column, GeoParquet 1.1
+
+Each file is sorted along a Hilbert curve: by the curve index of the centre of
+each geometry's bounding box (the curve spans the whole EPSG:3857 square, 16
+bits an axis), then by `osm_id`. Neighbours on the ground are neighbours in the
+file, so a row group covers one compact stretch of the city.
+
+The `bbox` column holds each geometry's extent, exactly `ST_Extent(way)`, in
+the same EPSG:3857 metres. Its row group statistics are what make a bounding
+box query cheap: a reader compares the box with each group's min and max and
+skips the groups that cannot match, without opening `way`.
+
+The `geo` metadata is GeoParquet 1.1.0: `way` is the primary column, WKB, with
+its geometry type (`Point`, `LineString` or `Polygon`, one per table), its
+extent, `bbox` as its covering, and the CRS as the PROJJSON of EPSG:3857.
+
+Row groups are sized by bytes, about 4 MiB uncompressed (1 to 2 MB on disk),
+so that the tables have 12, 19, 71 and 6 of them. That is smaller than the 32
+MiB of the
+[Japan sibling](https://huggingface.co/datasets/yuiseki/osm-japan-src-2026-08):
+at 32 MiB a table of the 23 wards is one to nine groups and a box query reads
+most of it, while below 4 MiB the footer, which a remote reader fetches first,
+grows faster than the reads shrink.
+
+Filter on the `bbox` fields to get the pruning. The box below is 1 km around
+Tokyo station, converted to EPSG:3857 with
+`ST_Transform(ST_Point(lon, lat), 'EPSG:4326', 'EPSG:3857', always_xy := true)`.
+
+```sql
+SELECT osm_id, name
+FROM read_parquet('planet_osm_point.parquet')
+WHERE bbox.xmin <= 15559415 AND bbox.xmax >= 15558190
+  AND bbox.ymin <= 4257460  AND bbox.ymax >= 4256226
+  AND amenity = 'cafe';
+```
+
+That is a box test. For an exact test add
+`ST_Intersects(way, ST_MakeEnvelope(15558190, 4256226, 15559415, 4257460))`
+after it; the `bbox` condition still does the skipping.
+
+How much it skips, counted from the row group statistics alone, against the
+same rows in the order the database exported them:
+
+| table | query | before | after |
+|---|---|---|---|
+| `planet_osm_polygon` | 1 km around Tokyo station | 12/12 groups, 118 MB | 6/71 groups, 13 MB |
+| `planet_osm_polygon` | 500 m around Ueno station | 12/12, 118 MB | 6/71, 13 MB |
+| `planet_osm_polygon` | Chiyoda ward (bbox) | 12/12, 118 MB | 8/71, 18 MB |
+| `planet_osm_polygon` | Setagaya ward (bbox) | 12/12, 118 MB | 25/71, 54 MB |
+| `planet_osm_polygon` | `amenity = 'cafe'`, no box | 12/12, 118 MB | 40/71, 85 MB |
+| `planet_osm_point` | 1 km around Tokyo station | 3/3, 10 MB | 5/12, 6 MB |
+| `planet_osm_point` | Chiyoda ward (bbox) | 3/3, 10 MB | 8/12, 11 MB |
+| `planet_osm_line` | 1 km around Tokyo station | 3/3, 26 MB | 15/19, 27 MB |
+| `planet_osm_roads` | 1 km around Tokyo station | 1/1, 4 MB | 5/6, 4 MB |
+
+The polygon table, three quarters of the bytes, is where it pays. The other
+three gain little or nothing, for two reasons. `planet_osm_line` has 595 rows
+more than 10 km across, nearly all route relations (train, road, bus, subway,
+ferry), and sorted by their centres they widen every group to most of the
+city. And the extract keeps ways whole past the wards (see below), so the
+first group of `planet_osm_point` holds points hundreds of kilometres away and
+spans them all; every box query reads it.
+
+The `bbox` column is not free. Doubles barely compress, and the four files
+are 208 MB rather than 159 MB.
 
 ## The trap in the coordinates
 
